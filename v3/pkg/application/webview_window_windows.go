@@ -5,8 +5,6 @@ package application
 import (
 	"errors"
 	"fmt"
-	"github.com/wailsapp/wails/v3/internal/assetserver"
-	"github.com/wailsapp/wails/v3/internal/runtime"
 	"net/url"
 	"strconv"
 	"strings"
@@ -15,6 +13,9 @@ import (
 	"time"
 	"unicode/utf16"
 	"unsafe"
+
+	"github.com/wailsapp/wails/v3/internal/assetserver"
+	"github.com/wailsapp/wails/v3/internal/runtime"
 
 	"github.com/bep/debounce"
 	"github.com/wailsapp/go-webview2/webviewloader"
@@ -1276,10 +1277,16 @@ func (w *windowsWebviewWindow) processRequest(req *edge.ICoreWebView2WebResource
 		return
 	}
 
+	window := globalApplication.getWindowForID(w.parent.id)
+	if window == nil {
+		globalApplication.error("%s: window not found", uri, err)
+		return
+	}
+
 	webviewRequests <- &webViewAssetRequest{
 		Request:    webviewRequest,
 		windowId:   w.parent.id,
-		windowName: globalApplication.getWindowForID(w.parent.id).Name(),
+		windowName: window.Name(),
 	}
 }
 
