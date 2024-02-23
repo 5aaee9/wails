@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"sync"
 
@@ -427,6 +428,7 @@ func (a *App) fatal(message string, args ...any) {
 		println(msg)
 	}
 
+	debug.PrintStack()
 	if a.FatalHandler != nil {
 		a.FatalHandler(errors.New(fmt.Sprintf("%s %s", message, fmt.Sprint(args...))))
 	}
