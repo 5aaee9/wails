@@ -53,7 +53,7 @@ func (d *assetFileServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		d.logInfo(ctx, "Handling request", "url", url, "file", filename)
 		err = d.serveFSFile(rw, req, filename)
 		if os.IsNotExist(err) {
-			rw.WriteHeader(http.StatusNotFound)
+			_ = d.serveFSFile(rw, req, "index.html")
 			return
 		}
 	}
