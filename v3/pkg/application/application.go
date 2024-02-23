@@ -3,6 +3,8 @@ package application
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
+	"github.com/pkg/errors"
 	"io"
 	"log"
 	"log/slog"
@@ -294,6 +296,8 @@ type App struct {
 	Events    *EventProcessor
 	Logger    *slog.Logger
 
+	FatalHandler func(err error)
+
 	contextMenus     map[string]*Menu
 	contextMenusLock sync.Mutex
 
@@ -422,6 +426,11 @@ func (a *App) fatal(message string, args ...any) {
 	} else {
 		println(msg)
 	}
+
+	if a.FatalHandler != nil {
+		a.FatalHandler(errors.New(fmt.Sprintf("%s %s", message, fmt.Sprint(args...))))
+	}
+
 	os.Exit(1)
 }
 
