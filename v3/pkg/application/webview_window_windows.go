@@ -1514,15 +1514,6 @@ func (w *windowsWebviewWindow) navigationCompleted(sender *edge.ICoreWebView2, a
 	w.hasStarted = true
 
 	wasFocused := w.isFocused()
-	// Hack to make it visible: https://github.com/MicrosoftEdge/WebView2Feedback/issues/1077#issuecomment-825375026
-	err := w.chromium.Hide()
-	if err != nil {
-		globalApplication.fatal(err.Error())
-	}
-	err = w.chromium.Show()
-	if err != nil {
-		globalApplication.fatal(err.Error())
-	}
 	if wasFocused {
 		w.focus()
 	}
