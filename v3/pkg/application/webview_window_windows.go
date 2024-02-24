@@ -1517,6 +1517,8 @@ func (w *windowsWebviewWindow) navigationCompleted(sender *edge.ICoreWebView2, a
 	if wasFocused {
 		w.focus()
 	}
+	
+	_ = w.chromium.Show()
 
 	//f.mainWindow.hasBeenShown = true
 
