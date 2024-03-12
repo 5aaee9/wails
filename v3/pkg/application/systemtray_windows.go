@@ -347,6 +347,9 @@ func (s *windowsSystemTray) destroy() {
 	// Destroy the notification icon
 	nid := s.newNotifyIconData()
 	if !w32.ShellNotifyIcon(w32.NIM_DELETE, &nid) {
-		globalApplication.debug(syscall.GetLastError().Error())
+		err := syscall.GetLastError()
+		if err != nil {
+			globalApplication.debug(err.Error())
+		}
 	}
 }
