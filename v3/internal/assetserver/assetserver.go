@@ -60,6 +60,10 @@ func (a *AssetServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	req = req.WithContext(contextWithLogger(req.Context(), a.options.Logger))
 	a.handler.ServeHTTP(wrapped, req)
 
+	if wrapped.status < 400 {
+		return
+	}
+
 	a.options.Logger.Info(
 		"Asset Request:",
 		"windowName", req.Header.Get(webViewRequestHeaderWindowName),
