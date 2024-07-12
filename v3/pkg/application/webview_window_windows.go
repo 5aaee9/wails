@@ -29,6 +29,10 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/w32"
 )
 
+const (
+	windowDidMoveDebounceMS = 200
+)
+
 var edgeMap = map[string]uintptr{
 	"n-resize":  w32.HTTOP,
 	"ne-resize": w32.HTTOPRIGHT,
@@ -64,20 +68,40 @@ type windowsWebviewWindow struct {
 	focusingChromium   bool
 	dropTarget         *w32.DropTarget
 	onceDo             sync.Once
+
+	// Window move debouncer
+	moveDebouncer func(func())
 }
 
 func (w *windowsWebviewWindow) handleKeyEvent(_ string) {
 	// Unused on windows
 }
 
+// getBorderSizes returns the extended border size for the window
+func (w *windowsWebviewWindow) getBorderSizes() *LRTB {
+	var result LRTB
+	var frame w32.RECT
+	w32.DwmGetWindowAttribute(w.hwnd, w32.DWMWA_EXTENDED_FRAME_BOUNDS, unsafe.Pointer(&frame), unsafe.Sizeof(frame))
+	rect := w32.GetWindowRect(w.hwnd)
+	result.Left = int(frame.Left - rect.Left)
+	result.Top = int(frame.Top - rect.Top)
+	result.Right = int(rect.Right - frame.Right)
+	result.Bottom = int(rect.Bottom - frame.Bottom)
+	return &result
+}
+
 func (w *windowsWebviewWindow) setAbsolutePosition(x int, y int) {
 	// Set the window's absolute position
-	w32.SetWindowPos(w.hwnd, 0, x, y, 0, 0, w32.SWP_NOSIZE|w32.SWP_NOZORDER)
+	borderSize := w.getBorderSizes()
+	w32.SetWindowPos(w.hwnd, 0, x-borderSize.Left, y-borderSize.Top, 0, 0, w32.SWP_NOSIZE|w32.SWP_NOZORDER)
 }
 
 func (w *windowsWebviewWindow) absolutePosition() (int, int) {
 	rect := w32.GetWindowRect(w.hwnd)
-	left, right := w.scaleToDefaultDPI(int(rect.Left), int(rect.Right))
+	borderSizes := w.getBorderSizes()
+	x := int(rect.Left) + borderSizes.Left
+	y := int(rect.Top) + borderSizes.Top
+	left, right := w.scaleToDefaultDPI(x, y)
 	return left, right
 }
 
@@ -176,8 +200,7 @@ func (w *windowsWebviewWindow) run() {
 
 	w.chromium = edge.NewChromium()
 
-	var exStyle uint
-	exStyle = w32.WS_EX_CONTROLPARENT
+	exStyle := w32.WS_EX_CONTROLPARENT
 	if options.BackgroundType != BackgroundTypeSolid {
 		exStyle |= w32.WS_EX_NOREDIRECTIONBITMAP
 		if w.parent.options.IgnoreMouseEvents {
@@ -194,6 +217,11 @@ func (w *windowsWebviewWindow) run() {
 		exStyle |= w32.WS_EX_APPWINDOW
 	}
 
+	if options.Windows.ExStyle != 0 {
+		exStyle = options.Windows.ExStyle
+	}
+
+	// ToDo: X, Y should also be scaled, should it be always relative to the main monitor?
 	var startX, _ = lo.Coalesce(options.X, w32.CW_USEDEFAULT)
 	var startY, _ = lo.Coalesce(options.Y, w32.CW_USEDEFAULT)
 
@@ -217,14 +245,14 @@ func (w *windowsWebviewWindow) run() {
 	var style uint = w32.WS_OVERLAPPEDWINDOW
 
 	w.hwnd = w32.CreateWindowEx(
-		exStyle,
+		uint(exStyle),
 		windowClassName,
 		w32.MustStringToUTF16Ptr(options.Title),
 		style,
 		startX,
 		startY,
-		options.Width,
-		options.Height,
+		w32.CW_USEDEFAULT,
+		w32.CW_USEDEFAULT,
 		parent,
 		appMenu,
 		w32.GetModuleHandle(""),
@@ -234,13 +262,14 @@ func (w *windowsWebviewWindow) run() {
 		panic("Unable to create window")
 	}
 
-	w.setupChromium()
-
 	w.setSize(options.Width, options.Height)
 
-	// Min/max buttons
-	w.setStyle(!options.Windows.DisableMinimiseButton, w32.WS_MINIMIZEBOX)
-	w.setStyle(!options.Windows.DisableMaximiseButton, w32.WS_MAXIMIZEBOX)
+	w.setupChromium()
+
+	// Initialise the window buttons
+	w.setMinimiseButtonState(options.MinimiseButtonState)
+	w.setMaximiseButtonState(options.MaximiseButtonState)
+	w.setCloseButtonState(options.CloseButtonState)
 
 	// Register the window with the application
 	getNativeApplication().registerWindow(w)
@@ -267,7 +296,12 @@ func (w *windowsWebviewWindow) run() {
 	if !options.Windows.DisableIcon {
 		// App icon ID is 3
 		icon, err := NewIconFromResource(w32.GetModuleHandle(""), uint16(3))
-		if err == nil {
+		if err != nil {
+			icon, err = w32.CreateLargeHIconFromImage(globalApplication.options.Icon)
+		}
+		if err != nil {
+			globalApplication.Logger.Warn("Failed to load icon: %v", err)
+		} else {
 			w.setIcon(icon)
 		}
 	} else {
@@ -392,6 +426,10 @@ func (w *windowsWebviewWindow) relativePosition() (int, int) {
 	x := int(rect.Left) - int(monitorInfo.RcWork.Left)
 	y := int(rect.Top) - int(monitorInfo.RcWork.Top)
 
+	borderSize := w.getBorderSizes()
+	x += borderSize.Left
+	y += borderSize.Top
+
 	return w.scaleToDefaultDPI(x, y)
 }
 
@@ -473,6 +511,9 @@ func (w *windowsWebviewWindow) setRelativePosition(x int, y int) {
 	//x, y = w.scaleWithWindowDPI(x, y)
 	info := w32.GetMonitorInfoForWindow(w.hwnd)
 	workRect := info.RcWork
+	borderSize := w.getBorderSizes()
+	x -= borderSize.Left
+	y -= borderSize.Top
 	w32.SetWindowPos(w.hwnd, w32.HWND_TOP, int(workRect.Left)+x, int(workRect.Top)+y, 0, 0, w32.SWP_NOSIZE)
 }
 
@@ -858,7 +899,7 @@ func (w *windowsWebviewWindow) setBackdropType(backdropType BackdropType) {
 }
 
 func (w *windowsWebviewWindow) setIcon(icon w32.HICON) {
-	w32.SendMessage(w.hwnd, w32.BM_SETIMAGE, w32.IMAGE_ICON, icon)
+	w32.SendMessage(w.hwnd, w32.WM_SETICON, w32.ICON_BIG, icon)
 }
 
 func (w *windowsWebviewWindow) disableIcon() {
@@ -956,6 +997,12 @@ func (w *windowsWebviewWindow) WndProc(msg uint32, wparam, lparam uintptr) uintp
 		w.parent.emit(events.Windows.WindowSetFocus)
 	case w32.WM_MOVE, w32.WM_MOVING:
 		_ = w.chromium.NotifyParentWindowPositionChanged()
+		if w.moveDebouncer == nil {
+			w.moveDebouncer = debounce.New(time.Duration(windowDidMoveDebounceMS) * time.Millisecond)
+		}
+		w.moveDebouncer(func() {
+			w.parent.emit(events.Windows.WindowDidMove)
+		})
 	// Check for keypress
 	case w32.WM_KEYDOWN:
 		w.processKeyBinding(uint(wparam))
@@ -978,6 +1025,7 @@ func (w *windowsWebviewWindow) WndProc(msg uint32, wparam, lparam uintptr) uintp
 				InvokeSync(func() {
 					w.chromium.Resize()
 				})
+				w.parent.emit(events.Windows.WindowDidResize)
 			})
 		} else {
 			w.chromium.Resize()
@@ -1286,7 +1334,7 @@ func (w *windowsWebviewWindow) processRequest(req *edge.ICoreWebView2WebResource
 	webviewRequests <- &webViewAssetRequest{
 		Request:    webviewRequest,
 		windowId:   w.parent.id,
-		windowName: window.Name(),
+		windowName: w.parent.options.Name,
 	}
 }
 
@@ -1394,6 +1442,14 @@ func (w *windowsWebviewWindow) setupChromium() {
 		})
 
 	}
+
+	// event mapping
+	w.parent.On(events.Windows.WindowDidMove, func(e *WindowEvent) {
+		w.parent.emit(events.Common.WindowDidMove)
+	})
+	w.parent.On(events.Windows.WindowDidResize, func(e *WindowEvent) {
+		w.parent.emit(events.Common.WindowDidResize)
+	})
 
 	// We will get round to this
 	//if chromium.HasCapability(edge.AllowExternalDrop) {
@@ -1517,7 +1573,7 @@ func (w *windowsWebviewWindow) navigationCompleted(sender *edge.ICoreWebView2, a
 	if wasFocused {
 		w.focus()
 	}
-	
+
 	_ = w.chromium.Show()
 
 	//f.mainWindow.hasBeenShown = true
@@ -1626,6 +1682,14 @@ func (w *windowsWebviewWindow) processMessageWithAdditionalObjects(message strin
 	}
 }
 
+func (w *windowsWebviewWindow) setMaximiseButtonEnabled(enabled bool) {
+	w.setStyle(enabled, w32.WS_MAXIMIZEBOX)
+}
+
+func (w *windowsWebviewWindow) setMinimiseButtonEnabled(enabled bool) {
+	w.setStyle(enabled, w32.WS_MINIMIZEBOX)
+}
+
 func ScaleWithDPI(pixels int, dpi uint) int {
 	return (pixels * int(dpi)) / 96
 }
@@ -1641,4 +1705,42 @@ func NewIconFromResource(instance w32.HINSTANCE, resId uint16) (w32.HICON, error
 		err = errors.New(fmt.Sprintf("Cannot load icon from resource with id %v", resId))
 	}
 	return result, err
+}
+
+func (w *windowsWebviewWindow) setMinimiseButtonState(state ButtonState) {
+	switch state {
+	case ButtonDisabled, ButtonHidden:
+		w.setStyle(false, w32.WS_MINIMIZEBOX)
+	case ButtonEnabled:
+		w.setStyle(true, w32.WS_SYSMENU)
+		w.setStyle(true, w32.WS_MINIMIZEBOX)
+
+	}
+}
+
+func (w *windowsWebviewWindow) setMaximiseButtonState(state ButtonState) {
+	switch state {
+	case ButtonDisabled, ButtonHidden:
+		w.setStyle(false, w32.WS_MAXIMIZEBOX)
+	case ButtonEnabled:
+		w.setStyle(true, w32.WS_SYSMENU)
+		w.setStyle(true, w32.WS_MAXIMIZEBOX)
+	}
+}
+
+func (w *windowsWebviewWindow) setCloseButtonState(state ButtonState) {
+	switch state {
+	case ButtonEnabled:
+		w.setStyle(true, w32.WS_SYSMENU)
+		_ = w32.EnableCloseButton(w.hwnd)
+	case ButtonDisabled:
+		w.setStyle(true, w32.WS_SYSMENU)
+		_ = w32.DisableCloseButton(w.hwnd)
+	case ButtonHidden:
+		w.setStyle(false, w32.WS_SYSMENU)
+	}
+}
+
+func (w *windowsWebviewWindow) setGWLStyle(style int) {
+	w32.SetWindowLong(w.hwnd, w32.GWL_STYLE, uint32(style))
 }

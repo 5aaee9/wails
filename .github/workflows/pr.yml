@@ -56,14 +56,18 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        go-version: ['1.20']
+        go-version: ['1.22']
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install linux dependencies
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install linux dependencies (v3)
+        if:  ${{ matrix.os == 'ubuntu-latest' && github.event.pull_request.base.ref == 'v3-alpha' }}
+        run: sudo apt-get update -y && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev build-essential pkg-config
+
+      - name: Install linux dependencies (v2)
+        if:  ${{ matrix.os == 'ubuntu-latest' && github.event.pull_request.base.ref == 'master' }}
         run: sudo apt-get update -y && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev build-essential pkg-config
 
       - name: Setup Go
@@ -71,14 +75,28 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: Run tests (mac)
-        if: matrix.os == 'macos-latest'
+      - name: Run tests (mac) | v2
+        if: ${{ matrix.os == 'macos-latest' && github.event.pull_request.base.ref == 'master' }}
         env:
           CGO_LDFLAGS: -framework UniformTypeIdentifiers -mmacosx-version-min=10.13
+          CGO_CFLAGS: -mmacosx-version-min=10.13
         working-directory: ./v2
         run: go test -v ./...
 
-      - name: Run tests (!mac)
-        if: matrix.os != 'macos-latest'
-        working-directory: ./v2
+      - name: Run tests (!mac) | v2
+        if: ${{ matrix.os != 'macos-latest' && github.event.pull_request.base.ref == 'master' }}
+        working-directory:  ./v2
+        run: go test -v ./...
+
+      - name: Run tests (mac) | v3
+        if: ${{ matrix.os == 'macos-latest' && github.event.pull_request.base.ref == 'v3-alpha' }}
+        env:
+          CGO_LDFLAGS: -framework UniformTypeIdentifiers -mmacosx-version-min=10.13
+          CGO_CFLAGS: -mmacosx-version-min=10.13
+        working-directory: ./v3
+        run: go test -v ./...
+
+      - name: Run tests (!mac) | v3
+        if: ${{ matrix.os != 'macos-latest' && github.event.pull_request.base.ref == 'v3-alpha' }}
+        working-directory:  ./v3
         run: go test -v ./...

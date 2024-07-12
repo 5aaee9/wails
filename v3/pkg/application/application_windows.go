@@ -169,7 +169,7 @@ func (m *windowsApp) getCurrentWindowID() uint {
 func (m *windowsApp) setApplicationMenu(menu *Menu) {
 	if menu == nil {
 		// Create a default menu for windows
-		menu = defaultApplicationMenu()
+		menu = DefaultApplicationMenu()
 	}
 	menu.Update()
 
@@ -349,4 +349,12 @@ func (a *App) logPlatformInfo() {
 	args = append(args, osInfo.AsLogSlice()...)
 
 	a.info("Platform Info:", args...)
+}
+
+func (a *App) platformEnvironment() map[string]any {
+	result := map[string]any{}
+	webviewVersion, _ := webviewloader.GetAvailableCoreWebView2BrowserVersionString(a.options.Windows.WebviewBrowserPath)
+	result["Go-WebView2Loader"] = webviewloader.UsingGoWebview2Loader
+	result["WebView2"] = webviewVersion
+	return result
 }

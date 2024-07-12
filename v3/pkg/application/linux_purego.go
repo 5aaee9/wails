@@ -976,7 +976,7 @@ func windowSetupSignalHandlers(windowId uint, window, webview pointer, emit func
 	*/
 }
 
-func windowToggleDevTools(webview pointer) {
+func windowOpenDevTools(webview pointer) {
 	settings := webkitWebViewGetSettings(pointer(webview))
 	webkitSettingsSetEnableDeveloperExtras(
 		settings,
@@ -1084,6 +1084,15 @@ func runChooserDialog(window pointer, allowMultiple, createFolders, showHidden b
 // dialog related
 func runOpenFileDialog(dialog *OpenFileDialogStruct) ([]string, error) {
 	const GtkFileChooserActionOpen = 0
+	const GtkFileChooserActionSelectFolder = 2
+
+	var action int
+
+	if dialog.canChooseDirectories {
+		action = GtkFileChooserActionSelectFolder
+	} else {
+		action = GtkFileChooserActionOpen
+	}
 
 	window := pointer(0)
 	if dialog.window != nil {

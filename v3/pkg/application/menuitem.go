@@ -62,7 +62,7 @@ type MenuItem struct {
 	radioGroupMembers []*MenuItem
 }
 
-func newMenuItem(label string) *MenuItem {
+func NewMenuItem(label string) *MenuItem {
 	result := &MenuItem{
 		id:       uint(atomic.AddUintptr(&menuItemID, 1)),
 		label:    label,
@@ -72,7 +72,7 @@ func newMenuItem(label string) *MenuItem {
 	return result
 }
 
-func newMenuItemSeparator() *MenuItem {
+func NewMenuItemSeparator() *MenuItem {
 	result := &MenuItem{
 		id:       uint(atomic.AddUintptr(&menuItemID, 1)),
 		itemType: separator,
@@ -80,7 +80,7 @@ func newMenuItemSeparator() *MenuItem {
 	return result
 }
 
-func newMenuItemCheckbox(label string, checked bool) *MenuItem {
+func NewMenuItemCheckbox(label string, checked bool) *MenuItem {
 	result := &MenuItem{
 		id:       uint(atomic.AddUintptr(&menuItemID, 1)),
 		label:    label,
@@ -91,7 +91,7 @@ func newMenuItemCheckbox(label string, checked bool) *MenuItem {
 	return result
 }
 
-func newMenuItemRadio(label string, checked bool) *MenuItem {
+func NewMenuItemRadio(label string, checked bool) *MenuItem {
 	result := &MenuItem{
 		id:       uint(atomic.AddUintptr(&menuItemID, 1)),
 		label:    label,
@@ -102,7 +102,7 @@ func newMenuItemRadio(label string, checked bool) *MenuItem {
 	return result
 }
 
-func newSubMenuItem(label string) *MenuItem {
+func NewSubMenuItem(label string) *MenuItem {
 	result := &MenuItem{
 		id:       uint(atomic.AddUintptr(&menuItemID, 1)),
 		label:    label,
@@ -115,7 +115,7 @@ func newSubMenuItem(label string) *MenuItem {
 	return result
 }
 
-func newRole(role Role) *MenuItem {
+func NewRole(role Role) *MenuItem {
 	switch role {
 	case AppMenu:
 		return newAppMenu()
@@ -126,7 +126,7 @@ func newRole(role Role) *MenuItem {
 	case ViewMenu:
 		return newViewMenu()
 	case ServicesMenu:
-		return newServicesMenu()
+		return NewServicesMenu()
 	case SpeechMenu:
 		return newSpeechMenu()
 	case WindowMenu:
@@ -167,8 +167,8 @@ func newRole(role Role) *MenuItem {
 		return newForceReloadMenuItem()
 	case ToggleFullscreen:
 		return newToggleFullscreenMenuItem()
-	case ShowDevTools:
-		return newShowDevToolsMenuItem()
+	case OpenDevTools:
+		return newOpenDevToolsMenuItem()
 	case ResetZoom:
 		return newZoomResetMenuItem()
 	case ZoomIn:
@@ -189,8 +189,8 @@ func newRole(role Role) *MenuItem {
 	return nil
 }
 
-func newServicesMenu() *MenuItem {
-	serviceMenu := newSubMenuItem("Services")
+func NewServicesMenu() *MenuItem {
+	serviceMenu := NewSubMenuItem("Services")
 	serviceMenu.role = ServicesMenu
 	return serviceMenu
 }
@@ -235,6 +235,17 @@ func (m *MenuItem) SetAccelerator(shortcut string) *MenuItem {
 		m.impl.setAccelerator(accelerator)
 	}
 	return m
+}
+
+func (m *MenuItem) GetAccelerator() string {
+	if m.accelerator == nil {
+		return ""
+	}
+	return m.accelerator.String()
+}
+
+func (m *MenuItem) RemoveAccelerator() {
+	m.accelerator = nil
 }
 
 func (m *MenuItem) SetTooltip(s string) *MenuItem {
@@ -285,6 +296,12 @@ func (m *MenuItem) SetHidden(hidden bool) *MenuItem {
 	return m
 }
 
+// GetSubmenu returns the submenu of the MenuItem.
+// If the MenuItem is not a submenu, it returns nil.
+func (m *MenuItem) GetSubmenu() *Menu {
+	return m.submenu
+}
+
 func (m *MenuItem) Checked() bool {
 	return m.checked
 }
@@ -331,4 +348,30 @@ func (m *MenuItem) setContextData(data *ContextMenuData) {
 	if m.submenu != nil {
 		m.submenu.setContextData(data)
 	}
+}
+
+// Clone returns a deep copy of the MenuItem
+func (m *MenuItem) Clone() *MenuItem {
+	result := &MenuItem{
+		id:       m.id,
+		label:    m.label,
+		tooltip:  m.tooltip,
+		disabled: m.disabled,
+		checked:  m.checked,
+		hidden:   m.hidden,
+		bitmap:   m.bitmap,
+		callback: m.callback,
+		itemType: m.itemType,
+		role:     m.role,
+	}
+	if m.submenu != nil {
+		result.submenu = m.submenu.Clone()
+	}
+	if m.accelerator != nil {
+		result.accelerator = m.accelerator.clone()
+	}
+	if m.contextMenuData != nil {
+		result.contextMenuData = m.contextMenuData.clone()
+	}
+	return result
 }

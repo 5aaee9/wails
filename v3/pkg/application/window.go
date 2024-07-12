@@ -21,10 +21,11 @@ type Window interface {
 	DispatchWailsEvent(event *WailsEvent)
 	EnableSizeConstraints()
 	Error(message string, args ...any)
-	ExecJS(callID, js string)
+	ExecJS(js string)
 	Focus()
 	ForceReload()
 	Fullscreen() Window
+	GetBorderSizes() *LRTB
 	GetScreen() (*Screen, error)
 	GetZoom() float64
 	HandleDragAndDropMessage(filenames []string)
@@ -34,6 +35,7 @@ type Window interface {
 	Hide() Window
 	ID() uint
 	Info(message string, args ...any)
+	IsFocused() bool
 	IsFullscreen() bool
 	IsMaximised() bool
 	IsMinimised() bool
@@ -53,8 +55,10 @@ type Window interface {
 	SetAlwaysOnTop(b bool) Window
 	SetBackgroundColour(colour RGBA) Window
 	SetFrameless(frameless bool) Window
-	SetFullscreenButtonEnabled(enabled bool) Window
 	SetHTML(html string) Window
+	SetMinimiseButtonState(state ButtonState) Window
+	SetMaximiseButtonState(state ButtonState) Window
+	SetCloseButtonState(state ButtonState) Window
 	SetMaxSize(maxWidth, maxHeight int) Window
 	SetMinSize(minWidth, minHeight int) Window
 	SetRelativePosition(x, y int) Window
@@ -65,8 +69,9 @@ type Window interface {
 	SetZoom(magnification float64) Window
 	Show() Window
 	Size() (width int, height int)
-	ToggleDevTools()
+	OpenDevTools()
 	ToggleFullscreen()
+	ToggleMaximise()
 	UnFullscreen()
 	UnMaximise()
 	UnMinimise()

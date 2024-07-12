@@ -62,26 +62,31 @@ void* windowNew(unsigned int id, int width, int height, bool fraudulentWebsiteWa
 		config.preferences.tabFocusesLinks = *preferences.TabFocusesLinks;
 	}
 
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 110300
 	if (@available(macOS 11.3, *)) {
 		if (preferences.TextInteractionEnabled != NULL) {
 			config.preferences.textInteractionEnabled = *preferences.TextInteractionEnabled;
 		}
 	}
+#endif
 
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 120300
 	if (@available(macOS 12.3, *)) {
          if (preferences.FullscreenEnabled != NULL) {
              config.preferences.elementFullscreenEnabled = *preferences.FullscreenEnabled;
          }
      }
-
-
+#endif
 
 	config.suppressesIncrementalRendering = true;
     config.applicationNameForUserAgent = @"wails.io";
 	[config setURLSchemeHandler:delegate forURLScheme:@"wails"];
+
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 101500
  	if (@available(macOS 10.15, *)) {
          config.preferences.fraudulentWebsiteWarningEnabled = fraudulentWebsiteWarningEnabled;
 	}
+#endif
 
 	// Setup user content controller
     WKUserContentController* userContentController = [WKUserContentController new];
@@ -443,18 +448,12 @@ void windowSetHideTitle(void* nsWindow, bool hideTitle) {
 }
 
 // Set Window use toolbar
-void windowSetUseToolbar(void* nsWindow, bool useToolbar, int toolbarStyle) {
+void windowSetUseToolbar(void* nsWindow, bool useToolbar) {
 	WebviewWindow* window = (WebviewWindow*)nsWindow;
 	if( useToolbar ) {
 		NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:@"wails.toolbar"];
 		[toolbar autorelease];
 		[window setToolbar:toolbar];
-
-		// If macos 11 or higher, set toolbar style
-		if (@available(macOS 11.0, *)) {
-			[window setToolbarStyle:toolbarStyle];
-		}
-
 	} else {
 		[window setToolbar:nil];
 	}
@@ -462,14 +461,19 @@ void windowSetUseToolbar(void* nsWindow, bool useToolbar, int toolbarStyle) {
 
 // Set window toolbar style
 void windowSetToolbarStyle(void* nsWindow, int style) {
-	// use @available to check if the function is available
-	// if not, return
-	if (@available(macOS 11.0, *)) {
-		NSToolbar* toolbar = [(WebviewWindow*)nsWindow toolbar];
-		[toolbar setShowsBaselineSeparator:style];
-	}
-}
+	WebviewWindow* window = (WebviewWindow*)nsWindow;
 
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 110000
+	if (@available(macOS 11.0, *)) {
+		NSToolbar* toolbar = [window toolbar];
+		if ( toolbar == nil ) {
+			return;
+		}
+		[window setToolbarStyle:style];
+	}
+#endif
+
+}
 // Set Hide Toolbar Separator
 void windowSetHideToolbarSeparator(void* nsWindow, bool hideSeparator) {
 	NSToolbar* toolbar = [(WebviewWindow*)nsWindow toolbar];
@@ -477,6 +481,15 @@ void windowSetHideToolbarSeparator(void* nsWindow, bool hideSeparator) {
 		return;
 	}
 	[toolbar setShowsBaselineSeparator:!hideSeparator];
+}
+
+// Configure the toolbar auto-hide feature
+void windowSetShowToolbarWhenFullscreen(void* window, bool setting) {
+	WebviewWindow* nsWindow = (WebviewWindow*)window;
+	// Get delegate
+	WebviewWindowDelegate* delegate = (WebviewWindowDelegate*)[nsWindow delegate];
+	// Set height
+	delegate.showToolbarWhenFullscreen = setting;
 }
 
 // Set Window appearance type
@@ -634,22 +647,38 @@ static void windowHide(void *window) {
 	[(WebviewWindow*)window orderOut:nil];
 }
 
-static void enableMinimiseButton(void *window, bool enabled) {
+// setButtonState sets the state of the given button
+// 0 = enabled
+// 1 = disabled
+// 2 = hidden
+static void setButtonState(void *button, int state) {
+	if (button == nil) {
+		return;
+	}
+	NSButton *nsbutton = (NSButton*)button;
+	nsbutton.hidden = state == 2;
+	nsbutton.enabled = state != 1;
+}
+
+// setMinimiseButtonState sets the minimise button state
+static void setMinimiseButtonState(void *window, int state) {
 	WebviewWindow* nsWindow = (WebviewWindow*)window;
 	NSButton *minimiseButton = [nsWindow standardWindowButton:NSWindowMiniaturizeButton];
-	minimiseButton.enabled = enabled;
+	setButtonState(minimiseButton, state);
 }
 
-static void enableMaximiseButton(void *window, bool enabled) {
+// setMaximiseButtonState sets the maximise button state
+static void setMaximiseButtonState(void *window, int state) {
 	WebviewWindow* nsWindow = (WebviewWindow*)window;
 	NSButton *maximiseButton = [nsWindow standardWindowButton:NSWindowZoomButton];
-	maximiseButton.enabled = enabled;
+	setButtonState(maximiseButton, state);
 }
 
-static void enableCloseButton(void *window, bool enabled) {
+// setCloseButtonState sets the close button state
+static void setCloseButtonState(void *window, int state) {
 	WebviewWindow* nsWindow = (WebviewWindow*)window;
 	NSButton *closeButton = [nsWindow standardWindowButton:NSWindowCloseButton];
-	closeButton.enabled = enabled;
+	setButtonState(closeButton, state);
 }
 
 // windowShowMenu opens an NSMenu at the given coordinates
@@ -689,7 +718,7 @@ static void startDrag(void *window) {
 
 // Credit: https://stackoverflow.com/q/33319295
 static void windowPrint(void *window) {
-
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 110000
 	// Check if macOS 11.0 or newer
 	if (@available(macOS 11.0, *)) {
 		WebviewWindow* nsWindow = (WebviewWindow*)window;
@@ -721,6 +750,7 @@ static void windowPrint(void *window) {
 		// [printOperation runOperation] DOES NOT WORK WITH WKWEBVIEW, use
 		[po runOperationModalForWindow:window delegate:windowDelegate didRunSelector:nil contextInfo:nil];
 	}
+#endif
 }
 
 void setWindowEnabled(void *window, bool enabled) {
@@ -745,15 +775,14 @@ void windowFocus(void *window) {
 */
 import "C"
 import (
-	"github.com/wailsapp/wails/v3/internal/assetserver"
-	"github.com/wailsapp/wails/v3/internal/runtime"
 	"sync"
 	"unsafe"
 
+	"github.com/wailsapp/wails/v3/internal/assetserver"
+	"github.com/wailsapp/wails/v3/internal/runtime"
+
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
-
-var showDevTools = func(window unsafe.Pointer) {}
 
 type macosWebviewWindow struct {
 	nsWindow unsafe.Pointer
@@ -768,6 +797,10 @@ func (w *macosWebviewWindow) handleKeyEvent(acceleratorString string) {
 		return
 	}
 	w.parent.processKeyBinding(accelerator.String())
+}
+
+func (w *macosWebviewWindow) getBorderSizes() *LRTB {
+	return &LRTB{}
 }
 
 func (w *macosWebviewWindow) isFocused() bool {
@@ -898,10 +931,6 @@ func (w *macosWebviewWindow) zoomReset() {
 	C.windowZoomReset(w.nsWindow)
 }
 
-func (w *macosWebviewWindow) toggleDevTools() {
-	showDevTools(w.nsWindow)
-}
-
 func (w *macosWebviewWindow) reload() {
 	//TODO: Implement
 	globalApplication.debug("reload called on WebviewWindow", "parentID", w.parent.id)
@@ -968,7 +997,6 @@ func (w *macosWebviewWindow) setEnabled(enabled bool) {
 }
 
 func (w *macosWebviewWindow) execJS(js string) {
-
 	InvokeAsync(func() {
 		if globalApplication.performingShutdown {
 			return
@@ -1126,15 +1154,10 @@ func (w *macosWebviewWindow) run() {
 		case MacBackdropNormal:
 		}
 
-		if macOptions.DisableMinimiseButton {
-			C.enableMinimiseButton(w.nsWindow, C.bool(false))
-		}
-		if macOptions.DisableMaximiseButton {
-			C.enableMaximiseButton(w.nsWindow, C.bool(false))
-		}
-		if macOptions.DisableCloseButton {
-			C.enableCloseButton(w.nsWindow, C.bool(false))
-		}
+		// Initialise the window buttons
+		w.setMinimiseButtonState(options.MinimiseButtonState)
+		w.setMaximiseButtonState(options.MaximiseButtonState)
+		w.setCloseButtonState(options.CloseButtonState)
 
 		if options.IgnoreMouseEvents {
 			C.windowIgnoreMouseEvents(w.nsWindow, C.bool(true))
@@ -1146,11 +1169,12 @@ func (w *macosWebviewWindow) run() {
 			C.windowSetHideTitleBar(w.nsWindow, C.bool(titleBarOptions.Hide))
 			C.windowSetHideTitle(w.nsWindow, C.bool(titleBarOptions.HideTitle))
 			C.windowSetFullSizeContent(w.nsWindow, C.bool(titleBarOptions.FullSizeContent))
-			if titleBarOptions.UseToolbar {
-				C.windowSetUseToolbar(w.nsWindow, C.bool(titleBarOptions.UseToolbar), C.int(titleBarOptions.ToolbarStyle))
-			}
+			C.windowSetUseToolbar(w.nsWindow, C.bool(titleBarOptions.UseToolbar))
+			C.windowSetToolbarStyle(w.nsWindow, C.int(titleBarOptions.ToolbarStyle))
+			C.windowSetShowToolbarWhenFullscreen(w.nsWindow, C.bool(titleBarOptions.ShowToolbarWhenFullscreen))
 			C.windowSetHideToolbarSeparator(w.nsWindow, C.bool(titleBarOptions.HideToolbarSeparator))
 		}
+
 		if macOptions.Appearance != "" {
 			C.windowSetAppearanceTypeByName(w.nsWindow, C.CString(string(macOptions.Appearance)))
 		}
@@ -1186,7 +1210,7 @@ func (w *macosWebviewWindow) run() {
 				if options.CSS != "" {
 					C.windowInjectCSS(w.nsWindow, C.CString(options.CSS))
 				}
-				if options.Hidden == false {
+				if !options.Hidden {
 					C.windowShow(w.nsWindow)
 					w.setHasShadow(!options.Mac.DisableShadow)
 				} else {
@@ -1211,6 +1235,9 @@ func (w *macosWebviewWindow) run() {
 		})
 		w.parent.On(events.Mac.WindowDidResignMain, func(_ *WindowEvent) {
 			w.parent.emit(events.Common.WindowLostFocus)
+		})
+		w.parent.On(events.Mac.WindowDidResize, func(_ *WindowEvent) {
+			w.parent.emit(events.Common.WindowDidResize)
 		})
 
 		if options.HTML != "" {
@@ -1262,4 +1289,16 @@ func (w *macosWebviewWindow) setHTML(html string) {
 func (w *macosWebviewWindow) startDrag() error {
 	C.startDrag(w.nsWindow)
 	return nil
+}
+
+func (w *macosWebviewWindow) setMinimiseButtonState(state ButtonState) {
+	C.setMinimiseButtonState(w.nsWindow, C.int(state))
+}
+
+func (w *macosWebviewWindow) setMaximiseButtonState(state ButtonState) {
+	C.setMaximiseButtonState(w.nsWindow, C.int(state))
+}
+
+func (w *macosWebviewWindow) setCloseButtonState(state ButtonState) {
+	C.setCloseButtonState(w.nsWindow, C.int(state))
 }

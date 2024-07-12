@@ -56,7 +56,7 @@ var modifierMap = map[string]modifier{
 	"cmdorctrl":   CmdOrCtrlKey,
 	"cmd":         CmdOrCtrlKey,
 	"command":     CmdOrCtrlKey,
-	"ctrl":        CmdOrCtrlKey,
+	"ctrl":        ControlKey,
 	"optionoralt": OptionOrAltKey,
 	"alt":         OptionOrAltKey,
 	"option":      OptionOrAltKey,
@@ -68,6 +68,11 @@ var modifierMap = map[string]modifier{
 type accelerator struct {
 	Key       string
 	Modifiers []modifier
+}
+
+func (a *accelerator) clone() *accelerator {
+	result := *a
+	return &result
 }
 
 func (a *accelerator) String() string {

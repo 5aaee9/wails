@@ -3,6 +3,7 @@
 package cfd
 
 import (
+	"os"
 	"reflect"
 )
 
@@ -74,6 +75,10 @@ func (config *DialogConfig) apply(dialog Dialog) (err error) {
 	}
 
 	if config.Folder != "" {
+		_, err = os.Stat(config.Folder)
+		if err != nil {
+			return
+		}
 		err = dialog.SetFolder(config.Folder)
 		if err != nil {
 			return
@@ -81,6 +86,10 @@ func (config *DialogConfig) apply(dialog Dialog) (err error) {
 	}
 
 	if config.DefaultFolder != "" {
+		_, err = os.Stat(config.DefaultFolder)
+		if err != nil {
+			return
+		}
 		err = dialog.SetDefaultFolder(config.DefaultFolder)
 		if err != nil {
 			return
