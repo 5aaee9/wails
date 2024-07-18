@@ -261,6 +261,11 @@ func (c Calloc) Free() {
 	c.pool = []unsafe.Pointer{}
 }
 
+func uintPointer(value uint) unsafe.Pointer {
+	cValue := C.uint(value)
+	return unsafe.Pointer(&cValue)
+}
+
 type windowPointer *C.GtkWindow
 type identifier C.uint
 type pointer unsafe.Pointer
@@ -388,7 +393,7 @@ func appDestroy(application pointer) {
 func (w *linuxWebviewWindow) contextMenuSignals(menu pointer) {
 	c := NewCalloc()
 	defer c.Free()
-	winID := unsafe.Pointer(uintptr(C.uint(w.parent.ID())))
+	winID := uintPointer(w.parent.ID())
 	C.signal_connect(unsafe.Pointer(menu), c.String("button-release-event"), C.onMenuButtonEvent, winID)
 }
 
@@ -991,8 +996,9 @@ func windowNewWebview(parentId uint, gpuPolicy WebviewGpuPolicy) pointer {
 	manager := C.webkit_user_content_manager_new()
 	C.webkit_user_content_manager_register_script_message_handler(manager, c.String("external"))
 	webView := C.webkit_web_view_new_with_user_content_manager(manager)
-	winID := unsafe.Pointer(uintptr(C.uint(parentId)))
+	winID := uintPointer(parentId)
 
+	println(parentId)
 	// attach window id to both the webview and contentmanager
 	C.g_object_set_data((*C.GObject)(unsafe.Pointer(webView)), c.String("windowid"), C.gpointer(winID))
 	C.g_object_set_data((*C.GObject)(unsafe.Pointer(manager)), c.String("windowid"), C.gpointer(winID))
@@ -1260,7 +1266,7 @@ func (w *linuxWebviewWindow) setupSignalHandlers(emit func(e events.WindowEventT
 	c := NewCalloc()
 	defer c.Free()
 
-	winID := unsafe.Pointer(uintptr(C.uint(w.parent.ID())))
+	winID := uintPointer(w.parent.ID())
 
 	// Set up the window close event
 	wv := unsafe.Pointer(w.webview)
