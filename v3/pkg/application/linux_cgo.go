@@ -233,6 +233,12 @@ static void enableDND(GtkWidget *widget, gpointer data)
 
     signal_connect(widget, "drag-data-received", on_data_received, data);
 }
+
+static gpointer copyUintPointer(uint value) {
+	uint *result = malloc(sizeof(uint));
+	*result = value;
+	return result;
+}
 */
 import "C"
 
@@ -973,7 +979,7 @@ func (w *linuxWebviewWindow) minimise() {
 	C.gtk_window_iconify(w.gtkWindow())
 }
 
-func windowNew(application pointer, menu pointer, windowId *uint, gpuPolicy WebviewGpuPolicy) (window, webview, vbox pointer) {
+func windowNew(application pointer, menu pointer, windowId uint, gpuPolicy WebviewGpuPolicy) (window, webview, vbox pointer) {
 	window = pointer(C.gtk_application_window_new((*C.GtkApplication)(application)))
 	C.g_object_ref_sink(C.gpointer(window))
 	webview = windowNewWebview(windowId, gpuPolicy)
@@ -990,17 +996,17 @@ func windowNew(application pointer, menu pointer, windowId *uint, gpuPolicy Webv
 	return
 }
 
-func windowNewWebview(parentId *uint, gpuPolicy WebviewGpuPolicy) pointer {
+func windowNewWebview(parentId uint, gpuPolicy WebviewGpuPolicy) pointer {
 	c := NewCalloc()
 	defer c.Free()
 	manager := C.webkit_user_content_manager_new()
 	C.webkit_user_content_manager_register_script_message_handler(manager, c.String("external"))
 	webView := C.webkit_web_view_new_with_user_content_manager(manager)
-	winID := uintptr(unsafe.Pointer(parentId))
-	println(winID)
+
+	winId := C.copyUintPointer(C.uint(parentId))
 	// attach window id to both the webview and contentmanager
-	C.g_object_set_data((*C.GObject)(unsafe.Pointer(webView)), c.String("windowid"), (C.gpointer)(winID))
-	C.g_object_set_data((*C.GObject)(unsafe.Pointer(manager)), c.String("windowid"), (C.gpointer)(winID))
+	C.g_object_set_data((*C.GObject)(unsafe.Pointer(webView)), c.String("windowid"), winId)
+	C.g_object_set_data((*C.GObject)(unsafe.Pointer(manager)), c.String("windowid"), winId)
 
 	registerURIScheme.Do(func() {
 		context := C.webkit_web_view_get_context(C.webkit_web_view(webView))
@@ -1491,13 +1497,12 @@ func getKeyboardState(event *C.GdkEventKey) (string, bool) {
 //export onProcessRequest
 func onProcessRequest(request *C.WebKitURISchemeRequest, data C.uintptr_t) {
 	webView := C.webkit_uri_scheme_request_get_web_view(request)
-	windowId := (*uint)(C.g_object_get_data((*C.GObject)(unsafe.Pointer(webView)), C.CString("windowid")))
+	windowId := uint(*(*C.uint)(C.g_object_get_data((*C.GObject)(unsafe.Pointer(webView)), C.CString("windowid"))))
 
-	println("onProcessRequest", uint(*windowId))
 	webviewRequests <- &webViewAssetRequest{
 		Request:    webview.NewRequest(unsafe.Pointer(request)),
-		windowId:   uint(*windowId),
-		windowName: globalApplication.getWindowForID(uint(*windowId)).Name(),
+		windowId:   windowId,
+		windowName: globalApplication.getWindowForID(windowId).Name(),
 	}
 }
 
@@ -1506,16 +1511,14 @@ func sendMessageToBackend(contentManager *C.WebKitUserContentManager, result *C.
 	data unsafe.Pointer) {
 
 	// Get the windowID from the contentManager
-	windowID := (*uint)(C.g_object_get_data((*C.GObject)(unsafe.Pointer(contentManager)), C.CString("windowid")))
-
-	println("sendMessageToBackend", uint(*windowID))
+	windowID := uint(*(*C.uint)(C.g_object_get_data((*C.GObject)(unsafe.Pointer(contentManager)), C.CString("windowid"))))
 	var msg string
 	value := C.webkit_javascript_result_get_js_value(result)
 	message := C.jsc_value_to_string(value)
 	msg = C.GoString(message)
 	defer C.g_free(C.gpointer(message))
 	windowMessageBuffer <- &windowMessage{
-		windowId: uint(*windowID),
+		windowId: windowID,
 		message:  msg,
 	}
 }
