@@ -245,7 +245,9 @@ func (s *windowsSystemTray) updateIcon() {
 	}
 
 	if !w32.ShellNotifyIcon(w32.NIM_MODIFY, &nid) {
-		panic(syscall.GetLastError())
+		if err := syscall.GetLastError(); err != nil {
+			panic(err)
+		}
 	}
 	return
 }
