@@ -4,9 +4,11 @@
 package cfd
 
 import (
-	"github.com/go-ole/go-ole"
+	"fmt"
 	"syscall"
 	"unsafe"
+
+	"github.com/go-ole/go-ole"
 )
 
 const (
@@ -38,11 +40,9 @@ type iShellItemArrayVtbl struct {
 
 func (vtbl *iShellItemArrayVtbl) getCount(objPtr unsafe.Pointer) (uintptr, error) {
 	var count uintptr
-	ret, _, _ := syscall.Syscall(vtbl.GetCount,
-		1,
+	ret, _, _ := syscall.SyscallN(vtbl.GetCount,
 		uintptr(objPtr),
-		uintptr(unsafe.Pointer(&count)),
-		0)
+		uintptr(unsafe.Pointer(&count)))
 	if err := hresultToError(ret); err != nil {
 		return 0, err
 	}
@@ -60,7 +60,7 @@ func (vtbl *iShellItemArrayVtbl) getItemAt(objPtr unsafe.Pointer, index uintptr)
 		return "", err
 	}
 	if shellItem == nil {
-		return "", ErrorCancelled
+		return "", fmt.Errorf("shellItem is nil")
 	}
 	defer shellItem.vtbl.release(unsafe.Pointer(shellItem))
 	return shellItem.vtbl.getDisplayName(unsafe.Pointer(shellItem))
